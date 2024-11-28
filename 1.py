@@ -109,6 +109,9 @@ class AudioInterfaceApp:
             self.level_V = self.initial_voltage
             self.setGeneratorParams(self.level_V)
 
+            # Dodanie komunikatu, że napięcie zostało ustawione
+            messagebox.showinfo("Ustawienie napięcia", f"Napięcie ustawione na {self.level_V} V")
+
         # Zmiana częstotliwości na 500 Hz i zwiększenie napięcia o 3.2 dB
         self.set_frequency(500)
         self.change_voltage_dB(3.2)
@@ -146,4 +149,4 @@ if __name__ == "__main__":
     app = AudioInterfaceApp(root)
     root.mainloop()
 
-    APx.BenchMode.Generator.On = False
+    APx.BenchMode.Generator
