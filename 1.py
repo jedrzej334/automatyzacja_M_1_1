@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import simpledialog
 from openpyxl import load_workbook
 import clr
+import math
 
 # Dodanie odniesień do bibliotek APx500
 clr.AddReference("System.Drawing")
@@ -93,19 +94,19 @@ class AudioInterfaceApp:
 
     def start_measurement(self):
         # Ustawienie początkowego napięcia
-        user_input_voltage = simpledialog.askfloat("Ustaw początkowe napięcie", "Podaj początkowe napięcie (V):", minvalue=0.001, maxvalue=10.0)
+        user_input_voltage = simpledialog.askfloat("Ustaw początkowe napięcie", "Podaj początkowe napięcie (V) dla 1000 Hz:", minvalue=0.001, maxvalue=10.0)
         if user_input_voltage is not None:
             self.initial_voltage = user_input_voltage
             self.level_V = self.initial_voltage
             self.setGeneratorParams(self.level_V)
 
-        # Zmiana częstotliwości na 500 Hz i zwiększenie poziomu dB o 3.2
+        # Zmiana częstotliwości na 500 Hz i zwiększenie napięcia o 3.2 dB
         self.set_frequency(500)
-        self.change_dB(3.2)
+        self.change_voltage_dB(3.2)
 
-        # Po 500 Hz przejdź na 250 Hz i zwiększ poziom dB o 8.6
+        # Po 500 Hz przejdź na 250 Hz i zwiększ napięcie o 8.6 dB
         self.set_frequency(250)
-        self.change_dB(8.6)
+        self.change_voltage_dB(8.6)
 
         # Pytanie o wartość dB i zapisanie jej do pliku Excel
         user_input_dB = simpledialog.askfloat("Wprowadź wartość", "Podaj wartość dB z miernika:")
@@ -123,6 +124,12 @@ class AudioInterfaceApp:
                 print("Dane zapisane do pliku Excel.")
             except FileNotFoundError:
                 print("Nie znaleziono pliku Excel. Upewnij się, że ścieżka jest poprawna.")
+
+    def change_voltage_dB(self, dB_increase):
+        # Przeliczanie napięcia na podstawie zmiany dB
+        # Przeliczanie napięcia w zależności od zmiany dB (używając wzoru: V2 = V1 * 10^(dB/20))
+        self.level_V *= 10 ** (dB_increase / 20)
+        self.setGeneratorParams(self.level_V)
 
 # Uruchomienie głównej aplikacji
 if __name__ == "__main__":
