@@ -22,11 +22,11 @@ class AudioInterfaceApp:
         self.root.geometry("500x700")
 
         ##### Zmienne początkowe #####
-        self.level_V = 0.0  # Poziom napięcia
+        self.initial_voltage = 0.1  # Początkowe napięcie (w Voltach)
+        self.level_V = self.initial_voltage  # Aktualne napięcie
         self.value_dB = 0.0  # Początkowy poziom dB
         self.freqList = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]  # Częstotliwości
         self.freq_var = tk.IntVar(value=0)  # Domyślna częstotliwość: 63 Hz
-        self.values_list = []  # Lista do przechowywania wyników
 
         ##### Tworzenie GUI #####
         # Nagłówek
@@ -46,8 +46,8 @@ class AudioInterfaceApp:
 
         self.frequency_slider.bind("<Motion>", self.update_frequency_label)
 
-        # Przycisk do zmiany częstotliwości na 1000 Hz
-        self.change_freq_button = tk.Button(self.root, text="Ustaw 1000 Hz", command=lambda: self.set_frequency(1000))
+        # Przycisk do zmiany częstotliwości na 500 Hz
+        self.change_freq_button = tk.Button(self.root, text="Ustaw 500 Hz", command=lambda: self.set_frequency(500))
         self.change_freq_button.place(x=150, y=200)
 
         # Poziom dB
@@ -65,79 +65,69 @@ class AudioInterfaceApp:
         self.decrease_01_button.place(x=200, y=330)
 
         # Przycisk do rozpoczęcia pomiarów
-        self.start_measurement_button = tk.Button(self.root, text="Rozpocznij pomiar", command=self.start_measurement)
-        self.start_measurement_button.place(x=150, y=400)
+        self.start_button = tk.Button(self.root, text="Rozpocznij Pomiar", command=self.start_measurement)
+        self.start_button.place(x=150, y=380)
 
-    ##### Funkcje #####
-    def set_generator_params(self, level_dB):
-        """
-        Ustawia napięcie odpowiadające danemu poziomowi dB.
-        """
-        self.level_V = 10 ** (level_dB / 20)
-        APx.BenchMode.Generator.Levels.SetValue(OutputChannelIndex.Ch1, self.level_V)
+    def setGeneratorParams(self, level_mV):
+        level_V = level_mV / 1000  # Przekształć napięcie z mV na V
+        APx.BenchMode.Generator.Levels.SetValue(OutputChannelIndex.Ch1, level_V)
         APx.BenchMode.Generator.On = True
-        print(f"Generator ustawiony na {self.level_V:.4f} V (dla {level_dB} dB)")
 
     def set_frequency(self, freq):
-        """
-        Ustawia częstotliwość generatora.
-        """
         if freq in self.freqList:
             self.freq_var.set(self.freqList.index(freq))
             self.freq_value_label.config(text=f"Wybrana częstotliwość: {freq} Hz")
             APx.BenchMode.Generator.Frequency.Value = freq
-            print(f"Ustawiono częstotliwość na {freq} Hz")
-        else:
-            print(f"Częstotliwość {freq} Hz nie jest dostępna.")
-
-    def update_frequency_label(self, event):
-        """
-        Aktualizuje etykietę wybranej częstotliwości.
-        """
-        freq = self.freqList[self.freq_var.get()]
-        self.freq_value_label.config(text=f"Wybrana częstotliwość: {freq} Hz")
 
     def change_dB(self, step):
-        """
-        Zmienia poziom dB o podany krok i aktualizuje generator.
-        """
         self.value_dB += step
+        if self.value_dB < 0:
+            self.value_dB = 0
         self.level_value_label.config(text=f"{self.value_dB:.1f} dB")
-        self.set_generator_params(self.value_dB)
+        self.setGeneratorParams(self.level_V)
+
+    def update_frequency_label(self, event):
+        self.freq_value_label.config(text=f"Wybrana częstotliwość: {self.freqList[self.freq_var.get()]} Hz")
+        currentFreq = self.freqList[self.freq_var.get()]
+        APx.BenchMode.Generator.Frequency.Value = currentFreq
 
     def start_measurement(self):
-        """
-        Rozpoczyna pomiar od 94 dB do 89 dB i zapisuje wyniki do Excela.
-        """
-        self.set_frequency(1000)  # Ustaw częstotliwość na 1000 Hz
-        self.change_dB(94)  # Rozpocznij od 94 dB
-        self.ask_and_save()
+        # Ustawienie początkowego napięcia
+        user_input_voltage = simpledialog.askfloat("Ustaw początkowe napięcie", "Podaj początkowe napięcie (V):", minvalue=0.001, maxvalue=10.0)
+        if user_input_voltage is not None:
+            self.initial_voltage = user_input_voltage
+            self.level_V = self.initial_voltage
+            self.setGeneratorParams(self.level_V)
 
-        self.change_dB(-5)  # Przejdź do 89 dB
-        self.ask_and_save()
+        # Zmiana częstotliwości na 500 Hz i zwiększenie poziomu dB o 3.2
+        self.set_frequency(500)
+        self.change_dB(3.2)
 
-    def ask_and_save(self):
-        """
-        Prosi użytkownika o wartość z miernika i zapisuje do Excela.
-        """
-        user_input = simpledialog.askfloat("Wprowadź wartość", "Podaj wartość dB z miernika:")
-        if user_input is not None:
-            self.values_list.append(user_input)
-            print(f"Zapisano wartość: {user_input} dB")
+        # Po 500 Hz przejdź na 250 Hz i zwiększ poziom dB o 8.6
+        self.set_frequency(250)
+        self.change_dB(8.6)
 
+        # Pytanie o wartość dB i zapisanie jej do pliku Excel
+        user_input_dB = simpledialog.askfloat("Wprowadź wartość", "Podaj wartość dB z miernika:")
+        if user_input_dB is not None:
+            self.values_list.append(user_input_dB)
+            print(self.values_list)
+
+            # Zapisz dane do pliku Excel
             try:
                 wb = load_workbook('C:/Users/akust/Desktop/Automatyzacja_Jędrzej/automatyzacja_test.xlsx')
                 ws = wb.active
                 for i, value in enumerate(self.values_list, start=1):
                     ws[f'P{i}'] = value
                 wb.save('C:/Users/akust/Desktop/Automatyzacja_Jędrzej/automatyzacja_test.xlsx')
-                print("Dane zapisane do Excela.")
+                print("Dane zapisane do pliku Excel.")
             except FileNotFoundError:
-                print("Nie znaleziono pliku Excel.")
+                print("Nie znaleziono pliku Excel. Upewnij się, że ścieżka jest poprawna.")
 
-# Główna część aplikacji
+# Uruchomienie głównej aplikacji
 if __name__ == "__main__":
     root = tk.Tk()
     app = AudioInterfaceApp(root)
     root.mainloop()
+
     APx.BenchMode.Generator.On = False
