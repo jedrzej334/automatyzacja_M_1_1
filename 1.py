@@ -29,6 +29,9 @@ class AudioInterfaceApp:
         self.freqList = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]  # Częstotliwości
         self.freq_var = tk.IntVar(value=0)  # Domyślna częstotliwość: 63 Hz
 
+        # Inicjalizacja listy do przechowywania wartości dB
+        self.values_list = []
+
         ##### Tworzenie GUI #####
         # Nagłówek
         self.label = tk.Label(self.root, text="Wybierz częstotliwość", font=("Arial", 14))
