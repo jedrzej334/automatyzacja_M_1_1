@@ -1,9 +1,7 @@
 import tkinter as tk
 from tkinter import simpledialog
 from openpyxl import load_workbook
-import sys
 import clr
-import time
 
 clr.AddReference("System.Drawing")
 clr.AddReference("System.Windows.Forms")
@@ -27,47 +25,25 @@ class AudioInterfaceApp:
         self.root.geometry("500x700")
 
         ##### Zmienne początkowe ######
-        self.value_dB = 0.0  # Początkowy poziom dB
-        self.value_voltage = 1.0  # Początkowe napięcie w Voltach RMS (1 V RMS = 0 dBV)
+        self.reference_voltage_94dB = 1.0  # Napięcie referencyjne dla 94 dB SPL (przykładowo 1 V RMS)
+        self.value_dB = 94.0  # Początkowy poziom dB
+        self.value_voltage = self.reference_voltage_94dB  # Początkowe napięcie odpowiadające 94 dB
         self.freqList = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]  # Częstotliwości
         self.freq_var = tk.IntVar(value=0)  # Domyślna częstotliwość: 63 Hz
         self.values_list = []  # Lista do przechowywania wyników
 
         # Tworzenie GUI
-        self.label = tk.Label(self.root, text="Wybierz częstotliwość", font=("Arial", 14))
+        self.label = tk.Label(self.root, text="Interfejs Audio", font=("Arial", 16))
         self.label.place(x=150, y=20)
 
-        # Suwak do wyboru częstotliwości
-        self.freq_label = tk.Label(self.root, text="Częstotliwość (Hz):", font=("Arial", 12))
-        self.freq_label.place(x=50, y=70)
-
-        self.frequency_slider = tk.Scale(self.root, from_=0, to=len(self.freqList)-1, orient=tk.HORIZONTAL,
-                                          label="Częstotliwość (Hz)", variable=self.freq_var,
-                                          tickinterval=1)
-        self.frequency_slider.place(x=50, y=110, width=400)
-
-        self.freq_value_label = tk.Label(self.root, text=f"Wybrana częstotliwość: {self.freqList[self.freq_var.get()]} Hz", font=("Arial", 12))
-        self.freq_value_label.place(x=150, y=150)
-
-        self.frequency_slider.bind("<Motion>", self.update_frequency_label)
-
-        # Okno do wyświetlania poziomu dB
         self.level_label = tk.Label(self.root, text="Poziom (dB):", font=("Arial", 12))
-        self.level_label.place(x=50, y=200)
+        self.level_label.place(x=50, y=100)
 
         self.level_value_label = tk.Label(self.root, text=f"{self.value_dB} dB", font=("Arial", 12))
-        self.level_value_label.place(x=150, y=240)
+        self.level_value_label.place(x=150, y=100)
 
-        # Przyciski do zmiany poziomu dB
-        self.increase_01_button = tk.Button(self.root, text="Zwiększ o 0.1 dB", command=lambda: self.change_dB(0.1))
-        self.increase_01_button.place(x=50, y=280)
-
-        self.decrease_01_button = tk.Button(self.root, text="Zmniejsz o 0.1 dB", command=lambda: self.change_dB(-0.1))
-        self.decrease_01_button.place(x=200, y=280)
-
-        # Przyciski dodatkowe
-        self.increase_3_2_button = tk.Button(self.root, text="+3.2", command=lambda: self.change_dB(3.2))
-        self.increase_3_2_button.place(x=50, y=460)
+        self.start_button = tk.Button(self.root, text="Rozpocznij pomiar", command=self.start_measurement)
+        self.start_button.place(x=150, y=200)
 
     def setGeneratorParams(self):
         """
@@ -80,32 +56,51 @@ class AudioInterfaceApp:
         except Exception as e:
             print(f"Błąd podczas ustawiania generatora: {e}")
 
-    def change_dB(self, step):
+    def change_dB(self, new_dB):
         """
-        Zmienia poziom dB i odpowiednio dostosowuje napięcie.
+        Zmienia poziom dB na zadany poziom i odpowiednio dostosowuje napięcie.
         """
-        # Oblicz nowe napięcie
-        new_voltage = self.value_voltage * (10 ** (step / 20.0))
-        self.value_voltage = max(new_voltage, 0.001)  # Upewnij się, że napięcie nie spada poniżej sensownego minimum
-
-        # Aktualizacja poziomu dB
-        self.value_dB += step
-        if self.value_dB < 0:
-            self.value_dB = 0
-
-        # Aktualizacja etykiety GUI
+        self.value_dB = new_dB
+        self.value_voltage = self.reference_voltage_94dB * (10 ** ((self.value_dB - 94.0) / 20.0))  # Skaluje napięcie względem 94 dB SPL
         self.level_value_label.config(text=f"{self.value_dB:.1f} dB")
-
-        # Aktualizacja generatora
         self.setGeneratorParams()
 
-    def update_frequency_label(self, event):
+    def ask_and_save(self):
         """
-        Aktualizuje częstotliwość generatora i GUI w czasie rzeczywistym.
+        Pyta użytkownika o wartość i zapisuje ją do pliku Excel.
         """
-        self.freq_value_label.config(text=f"Wybrana częstotliwość: {self.freqList[self.freq_var.get()]} Hz")
-        currentFreq = self.freqList[self.freq_var.get()]
-        APx.BenchMode.Generator.Frequency.Value = currentFreq
+        # Okno dialogowe z pytaniem o wartość
+        user_input = simpledialog.askfloat("Wprowadź wartość", f"Podaj wartość dB zmierzoną przy {self.value_dB} dB:")
+
+        # Jeśli użytkownik podał wartość
+        if user_input is not None:
+            self.values_list.append((self.value_dB, user_input))  # Zapisz wartość dB i zmierzoną wartość
+
+            # Otwórz i zapisz dane do pliku Excel
+            try:
+                file_path = 'C:/Users/akust/Desktop/Automatyzacja_Jędrzej/automatyzacja_test.xlsx'
+                wb = load_workbook(file_path)  # Wczytaj plik Excel
+                ws = wb.active
+
+                # Zapisz wartości do kolumn
+                current_row = ws.max_row + 1
+                ws[f'A{current_row}'] = self.value_dB  # Zapisz poziom dB
+                ws[f'B{current_row}'] = user_input  # Zapisz zmierzoną wartość
+
+                wb.save(file_path)  # Zapisz zmiany
+                print(f"Dane zapisane do pliku Excel: {self.value_dB} dB, {user_input} dB")
+            except FileNotFoundError:
+                print("Nie znaleziono pliku Excel. Upewnij się, że ścieżka jest poprawna.")
+
+    def start_measurement(self):
+        """
+        Rozpoczyna sekwencję pomiarów od 94 dB do 89 dB.
+        """
+        self.change_dB(94)  # Ustaw początkowy poziom na 94 dB
+        self.ask_and_save()  # Poproś o wartość i zapisz
+
+        self.change_dB(89)  # Zmień poziom na 89 dB
+        self.ask_and_save()  # Poproś o wartość i zapisz
 
 
 # Główna część aplikacji
