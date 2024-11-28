@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog
+from tkinter import simpledialog, messagebox
 from openpyxl import load_workbook
 import clr
 import math
@@ -98,7 +98,13 @@ class AudioInterfaceApp:
     def start_measurement(self):
         # Ustawienie początkowego napięcia
         user_input_voltage = simpledialog.askfloat("Ustaw początkowe napięcie", "Podaj początkowe napięcie (V) dla 1000 Hz:", minvalue=0.001, maxvalue=10.0)
+        
         if user_input_voltage is not None:
+            # Weryfikacja wprowadzonego napięcia
+            is_correct = messagebox.askyesno("Weryfikacja napięcia", f"Czy napięcie {user_input_voltage} V jest poprawne?")
+            if not is_correct:
+                return  # Jeśli użytkownik wybierze "Nie", nie kontynuujemy
+
             self.initial_voltage = user_input_voltage
             self.level_V = self.initial_voltage
             self.setGeneratorParams(self.level_V)
