@@ -36,19 +36,15 @@ class AudioInterfaceApp:
         self.set_button.pack(pady=20)
 
     def set_voltage_for_80dB(self):
-        # Sprawdzenie połączenia z generatorem
-        if not APx.IsConnected:
-            messagebox.showerror("Błąd połączenia", "Brak połączenia z urządzeniem APx.")
-            return
-        
-        # Odczytanie aktualnego napięcia z generatora
+        # Sprawdzenie połączenia z generatorem - próbujemy wykonać operację, aby sprawdzić, czy urządzenie jest dostępne
         try:
+            # Próba odczytu wartości napięcia z generatora
             current_voltage_mV = APx.BenchMode.Generator.Levels.GetValue(OutputChannelIndex.Ch1)
             current_voltage = current_voltage_mV / 1000  # Przemiana na Volty
         except Exception as e:
-            messagebox.showerror("Błąd odczytu", f"Nie udało się odczytać napięcia z generatora: {str(e)}")
+            messagebox.showerror("Błąd połączenia", f"Brak połączenia z urządzeniem APx: {str(e)}")
             return
-        
+
         # Obliczanie wartości dB dla tego napięcia
         current_dB = self.calculate_dB_from_voltage(current_voltage)
 
