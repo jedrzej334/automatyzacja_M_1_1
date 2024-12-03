@@ -36,10 +36,19 @@ class AudioInterfaceApp:
         self.set_button.pack(pady=20)
 
     def set_voltage_for_80dB(self):
+        # Sprawdzenie połączenia z generatorem
+        if not APx.IsConnected:
+            messagebox.showerror("Błąd połączenia", "Brak połączenia z urządzeniem APx.")
+            return
+        
         # Odczytanie aktualnego napięcia z generatora
-        current_voltage_mV = APx.BenchMode.Generator.Levels.GetValue(OutputChannelIndex.Ch1)
-        current_voltage = current_voltage_mV / 1000  # Przemiana na Volty
-
+        try:
+            current_voltage_mV = APx.BenchMode.Generator.Levels.GetValue(OutputChannelIndex.Ch1)
+            current_voltage = current_voltage_mV / 1000  # Przemiana na Volty
+        except Exception as e:
+            messagebox.showerror("Błąd odczytu", f"Nie udało się odczytać napięcia z generatora: {str(e)}")
+            return
+        
         # Obliczanie wartości dB dla tego napięcia
         current_dB = self.calculate_dB_from_voltage(current_voltage)
 
@@ -49,10 +58,12 @@ class AudioInterfaceApp:
         voltage_needed = self.calculate_voltage_for_target_dB(current_dB, target_dB)
 
         # Ustawienie nowego napięcia w generatorze
-        self.set_generator_voltage(voltage_needed)
-
-        # Wyświetlenie komunikatu o ustawieniu napięcia
-        messagebox.showinfo("Zmiana napięcia", f"Ustawiono napięcie {voltage_needed:.4f} V, aby uzyskać 80 dB")
+        try:
+            self.set_generator_voltage(voltage_needed)
+            # Wyświetlenie komunikatu o ustawieniu napięcia
+            messagebox.showinfo("Zmiana napięcia", f"Ustawiono napięcie {voltage_needed:.4f} V, aby uzyskać 80 dB")
+        except Exception as e:
+            messagebox.showerror("Błąd ustawiania napięcia", f"Nie udało się ustawić napięcia: {str(e)}")
 
     def calculate_dB_from_voltage(self, voltage):
         # Obliczenie dB na podstawie wzoru: dB = 20 * log10(V2 / V1)
@@ -76,7 +87,12 @@ class AudioInterfaceApp:
 
 # Uruchomienie głównej aplikacji
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = AudioInterfaceApp(root)
-    root.mainloop()
-    APx.BenchMode.Generator.On = False  # Wyłączenie generatora po zakończeniu pracy
+    try:
+        root = tk.Tk()
+        app = AudioInterfaceApp(root)
+        root.mainloop()
+    except Exception as e:
+        messagebox.showerror("Błąd aplikacji", f"Nie udało się uruchomić aplikacji: {str(e)}")
+    finally:
+        if APx.BenchMode.Generator.On:
+            APx.BenchMode.Generator.On = False  # Wyłączenie generatora po zakończeniu pracy
