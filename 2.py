@@ -24,8 +24,7 @@ class AudioInterfaceApp:
         self.root.geometry("400x300")
 
         # Początkowe ustawienie napięcia (w Voltach)
-        self.initial_voltage = 0.1  # Początkowe napięcie (w Voltach)
-        self.level_V = self.initial_voltage  # Aktualne napięcie
+        self.level_V = 0.1  # Początkowe napięcie, ale potem będzie odczytywane z generatora
         self.value_dB = 0.0  # Początkowy poziom dB
 
         # Nagłówek
@@ -37,25 +36,35 @@ class AudioInterfaceApp:
         self.set_button.pack(pady=20)
 
     def set_voltage_for_80dB(self):
-        # Zapytanie o aktualny poziom dB z miernika
-        current_dB = simpledialog.askfloat("Wartość dB z miernika", "Podaj aktualną wartość dB z miernika:", minvalue=-100.0, maxvalue=100.0)
-        
-        if current_dB is None:
-            return  # Jeśli nie podano wartości dB, zakończ
+        # Odczytanie aktualnego napięcia z generatora
+        current_voltage_mV = APx.BenchMode.Generator.Levels.GetValue(OutputChannelIndex.Ch1)
+        current_voltage = current_voltage_mV / 1000  # Przemiana na Volty
 
-        # Obliczanie napięcia, aby uzyskać 80 dB
+        # Obliczanie wartości dB dla tego napięcia
+        current_dB = self.calculate_dB_from_voltage(current_voltage)
+
+        # Zapytanie o wartość dB, którą chcesz osiągnąć
         target_dB = 80.0
+        # Obliczenie nowego napięcia
         voltage_needed = self.calculate_voltage_for_target_dB(current_dB, target_dB)
 
-        # Ustawienie napięcia w generatorze
+        # Ustawienie nowego napięcia w generatorze
         self.set_generator_voltage(voltage_needed)
 
         # Wyświetlenie komunikatu o ustawieniu napięcia
         messagebox.showinfo("Zmiana napięcia", f"Ustawiono napięcie {voltage_needed:.4f} V, aby uzyskać 80 dB")
 
+    def calculate_dB_from_voltage(self, voltage):
+        # Obliczenie dB na podstawie wzoru: dB = 20 * log10(V2 / V1)
+        # Gdzie V2 to napięcie, a V1 to napięcie odniesienia (np. 1V)
+        reference_voltage = 1.0  # Załóżmy, że napięcie odniesienia to 1V
+        dB = 20 * math.log10(voltage / reference_voltage)
+        return dB
+
     def calculate_voltage_for_target_dB(self, current_dB, target_dB):
         # Przeliczenie napięcia na podstawie wzoru: V2 = V1 * 10^((dB_target - dB_current) / 20)
-        voltage_needed = self.level_V * 10 ** ((target_dB - current_dB) / 20)
+        reference_voltage = 1.0  # Napięcie odniesienia, np. 1V
+        voltage_needed = reference_voltage * 10 ** ((target_dB - current_dB) / 20)
         return voltage_needed
 
     def set_generator_voltage(self, voltage):
