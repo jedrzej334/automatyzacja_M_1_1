@@ -23,7 +23,7 @@ class AudioInterfaceApp:
         self.root.geometry("500x700")
 
         ##### Zmienne początkowe #####
-        self.initial_voltage = 0.0001  # Początkowe napięcie (100 uVrms = 0.0001 V)
+        self.initial_voltage = 0.0001  # Początkowe napięcie (w Voltach) - ustawione na 100 uVrms
         self.level_V = self.initial_voltage  # Aktualne napięcie
         self.value_dB = 0.0  # Początkowy poziom dB
         self.freqList = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]  # Częstotliwości
@@ -72,8 +72,10 @@ class AudioInterfaceApp:
         self.start_button = tk.Button(self.root, text="Rozpocznij Pomiar", command=self.start_measurement)
         self.start_button.place(x=150, y=380)
 
-    def setGeneratorParams(self, level_mV):
-        level_V = level_mV / 1000  # Przekształć napięcie z mV na V
+    def setGeneratorParams(self, level_V):
+        # Jeśli napięcie jest większe niż 2V, ograniczamy je do 2V
+        if level_V > 2.0:
+            level_V = 2.0  # Ustawienie maksymalnego napięcia na 2 Vrms
         APx.BenchMode.Generator.Levels.SetValue(OutputChannelIndex.Ch1, level_V)
         APx.BenchMode.Generator.On = True
 
@@ -97,20 +99,20 @@ class AudioInterfaceApp:
 
     def start_measurement(self):
         # Ustawienie początkowego napięcia
-        user_input_dB = simpledialog.askfloat("Wprowadź wartość dB", "Podaj wartość dB z miernika:")
+        user_input_voltage = simpledialog.askfloat("Ustaw początkowe napięcie", "Podaj początkowe napięcie (V) dla 1000 Hz:", minvalue=0.001, maxvalue=2.0)
         
-        if user_input_dB is not None:
-            # Obliczanie zmiany dB względem 70 dB
-            dB_diff = 70 - user_input_dB
-
-            # Przeliczanie napięcia, aby uzyskać 70 dB
-            self.level_V = self.initial_voltage * 10 ** (dB_diff / 20)
-
+        if user_input_voltage is not None:
             # Weryfikacja wprowadzonego napięcia
-            messagebox.showinfo("Nowe napięcie", f"Nowe napięcie ustawione na {self.level_V:.6f} V (dla 70 dB)")
+            is_correct = messagebox.askyesno("Weryfikacja napięcia", f"Czy napięcie {user_input_voltage} V jest poprawne?")
+            if not is_correct:
+                return  # Jeśli użytkownik wybierze "Nie", nie kontynuujemy
 
-            # Ustawienie generatora z nowym napięciem
+            self.initial_voltage = user_input_voltage
+            self.level_V = self.initial_voltage
             self.setGeneratorParams(self.level_V)
+
+            # Dodanie komunikatu, że napięcie zostało ustawione
+            messagebox.showinfo("Ustawienie napięcia", f"Napięcie ustawione na {self.level_V} V")
 
         # Zmiana częstotliwości na 500 Hz i zwiększenie napięcia o 3.2 dB
         self.set_frequency(500)
@@ -140,10 +142,17 @@ class AudioInterfaceApp:
     def change_voltage_dB(self, dB_increase):
         # Przeliczanie napięcia na podstawie zmiany dB
         # Przeliczanie napięcia w zależności od zmiany dB (używając wzoru: V2 = V1 * 10^(dB/20))
-        self.level_V *= 10 ** (dB_increase / 20)
+        new_voltage = self.level_V * 10 ** (dB_increase / 20)
+
+        # Sprawdzenie, czy napięcie nie przekracza 2 Vrms
+        if new_voltage > 2.0:
+            new_voltage = 2.0  # Ustawienie maksymalnego napięcia na 2 Vrms
+
+        self.level_V = new_voltage
         self.setGeneratorParams(self.level_V)
 
-# Uruchomienie głównej aplikacji
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = Audio
+
+# Tworzenie okna aplikacji
+root = tk.Tk()
+app = AudioInterfaceApp(root)
+root.mainloop()
