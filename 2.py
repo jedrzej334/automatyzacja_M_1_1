@@ -1,94 +1,149 @@
 import tkinter as tk
 from tkinter import simpledialog, messagebox
-import math
+from openpyxl import load_workbook
 import clr
+import math
 
-# Załadowanie bibliotek APx
+# Dodanie odniesień do bibliotek APx500
 clr.AddReference("System.Drawing")
 clr.AddReference("System.Windows.Forms")
 clr.AddReference(r"C:\\Program Files\\Audio Precision\\APx500 8.1\\API\\AudioPrecision.API2.dll")
 clr.AddReference(r"C:\\Program Files\\Audio Precision\\APx500 8.1\\API\\AudioPrecision.API.dll")
 
-from AudioPrecision.API import *
-from System.Drawing import Point
-from System.Windows.Forms import Application, Button, Form, Label
+from AudioPrecision.API import APx500_Application, APxOperatingMode, OutputChannelIndex
 from System.IO import Directory, Path
 
-# Inicjalizacja aplikacji APx
+# Inicjalizacja aplikacji APx500
 APx = APx500_Application(APxOperatingMode.BenchMode, True)
 
 class AudioInterfaceApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Ustawienie Napięcia i dB")
-        self.root.geometry("400x300")
+        self.root.title("Interfejs Audio")
+        self.root.geometry("500x700")
 
-        # Początkowe ustawienie napięcia (w Voltach)
-        self.level_V = 0.1  # Początkowe napięcie, ale potem będzie odczytywane z generatora
+        ##### Zmienne początkowe #####
+        self.initial_voltage = 0.0001  # Początkowe napięcie (100 uVrms = 0.0001 V)
+        self.level_V = self.initial_voltage  # Aktualne napięcie
         self.value_dB = 0.0  # Początkowy poziom dB
+        self.freqList = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]  # Częstotliwości
+        self.freq_var = tk.IntVar(value=0)  # Domyślna częstotliwość: 63 Hz
 
+        # Inicjalizacja listy do przechowywania wartości dB
+        self.values_list = []
+
+        ##### Tworzenie GUI #####
         # Nagłówek
-        self.label = tk.Label(self.root, text="Ustawienie poziomu dB", font=("Arial", 14))
-        self.label.pack(pady=20)
+        self.label = tk.Label(self.root, text="Wybierz częstotliwość", font=("Arial", 14))
+        self.label.place(x=150, y=20)
 
-        # Przycisk do ustawienia napięcia
-        self.set_button = tk.Button(self.root, text="Ustaw napięcie dla 80 dB", command=self.set_voltage_for_80dB)
-        self.set_button.pack(pady=20)
+        # Suwak do wyboru częstotliwości
+        self.freq_label = tk.Label(self.root, text="Częstotliwość (Hz):", font=("Arial", 12))
+        self.freq_label.place(x=50, y=70)
 
-    def set_voltage_for_80dB(self):
-        # Sprawdzenie połączenia z generatorem - próbujemy wykonać operację, aby sprawdzić, czy urządzenie jest dostępne
-        try:
-            # Próba odczytu wartości napięcia z generatora
-            current_voltage_mV = APx.BenchMode.Generator.Levels.GetValue(OutputChannelIndex.Ch1)
-            current_voltage = current_voltage_mV / 1000  # Przemiana na Volty
-        except Exception as e:
-            messagebox.showerror("Błąd połączenia", f"Brak połączenia z urządzeniem APx: {str(e)}")
-            return
+        self.frequency_slider = tk.Scale(self.root, from_=0, to=len(self.freqList) - 1, orient=tk.HORIZONTAL,
+                                         label="Częstotliwość (Hz)", variable=self.freq_var, tickinterval=1)
+        self.frequency_slider.place(x=50, y=110, width=400)
 
-        # Obliczanie wartości dB dla tego napięcia
-        current_dB = self.calculate_dB_from_voltage(current_voltage)
+        self.freq_value_label = tk.Label(self.root, text=f"Wybrana częstotliwość: {self.freqList[self.freq_var.get()]} Hz", font=("Arial", 12))
+        self.freq_value_label.place(x=150, y=150)
 
-        # Zapytanie o wartość dB, którą chcesz osiągnąć
-        target_dB = 80.0
-        # Obliczenie nowego napięcia
-        voltage_needed = self.calculate_voltage_for_target_dB(current_dB, target_dB)
+        self.frequency_slider.bind("<Motion>", self.update_frequency_label)
 
-        # Ustawienie nowego napięcia w generatorze
-        try:
-            self.set_generator_voltage(voltage_needed)
-            # Wyświetlenie komunikatu o ustawieniu napięcia
-            messagebox.showinfo("Zmiana napięcia", f"Ustawiono napięcie {voltage_needed:.4f} V, aby uzyskać 80 dB")
-        except Exception as e:
-            messagebox.showerror("Błąd ustawiania napięcia", f"Nie udało się ustawić napięcia: {str(e)}")
+        # Przycisk do zmiany częstotliwości na 500 Hz
+        self.change_freq_button = tk.Button(self.root, text="Ustaw 500 Hz", command=lambda: self.set_frequency(500))
+        self.change_freq_button.place(x=150, y=200)
 
-    def calculate_dB_from_voltage(self, voltage):
-        # Obliczenie dB na podstawie wzoru: dB = 20 * log10(V2 / V1)
-        # Gdzie V2 to napięcie, a V1 to napięcie odniesienia (np. 1V)
-        reference_voltage = 1.0  # Załóżmy, że napięcie odniesienia to 1V
-        dB = 20 * math.log10(voltage / reference_voltage)
-        return dB
+        # Poziom dB
+        self.level_label = tk.Label(self.root, text="Poziom (dB):", font=("Arial", 12))
+        self.level_label.place(x=50, y=250)
 
-    def calculate_voltage_for_target_dB(self, current_dB, target_dB):
-        # Przeliczenie napięcia na podstawie wzoru: V2 = V1 * 10^((dB_target - dB_current) / 20)
-        reference_voltage = 1.0  # Napięcie odniesienia, np. 1V
-        voltage_needed = reference_voltage * 10 ** ((target_dB - current_dB) / 20)
-        return voltage_needed
+        self.level_value_label = tk.Label(self.root, text=f"{self.value_dB:.1f} dB", font=("Arial", 12))
+        self.level_value_label.place(x=150, y=290)
 
-    def set_generator_voltage(self, voltage):
-        # Ustawienie napięcia w generatorze APx
-        # Zamiana napięcia na jednostki mV (APx oczekuje wartości w milivoltach)
-        voltage_mV = voltage * 1000
-        APx.BenchMode.Generator.Levels.SetValue(OutputChannelIndex.Ch1, voltage_mV)
-        APx.BenchMode.Generator.On = True  # Upewnij się, że generator jest włączony
+        # Przyciski do zmiany poziomu dB
+        self.increase_01_button = tk.Button(self.root, text="Zwiększ o 0.1 dB", command=lambda: self.change_dB(0.1))
+        self.increase_01_button.place(x=50, y=330)
+
+        self.decrease_01_button = tk.Button(self.root, text="Zmniejsz o 0.1 dB", command=lambda: self.change_dB(-0.1))
+        self.decrease_01_button.place(x=200, y=330)
+
+        # Przycisk do rozpoczęcia pomiarów
+        self.start_button = tk.Button(self.root, text="Rozpocznij Pomiar", command=self.start_measurement)
+        self.start_button.place(x=150, y=380)
+
+    def setGeneratorParams(self, level_mV):
+        level_V = level_mV / 1000  # Przekształć napięcie z mV na V
+        APx.BenchMode.Generator.Levels.SetValue(OutputChannelIndex.Ch1, level_V)
+        APx.BenchMode.Generator.On = True
+
+    def set_frequency(self, freq):
+        if freq in self.freqList:
+            self.freq_var.set(self.freqList.index(freq))
+            self.freq_value_label.config(text=f"Wybrana częstotliwość: {freq} Hz")
+            APx.BenchMode.Generator.Frequency.Value = freq
+
+    def change_dB(self, step):
+        self.value_dB += step
+        if self.value_dB < 0:
+            self.value_dB = 0
+        self.level_value_label.config(text=f"{self.value_dB:.1f} dB")
+        self.setGeneratorParams(self.level_V)
+
+    def update_frequency_label(self, event):
+        self.freq_value_label.config(text=f"Wybrana częstotliwość: {self.freqList[self.freq_var.get()]} Hz")
+        currentFreq = self.freqList[self.freq_var.get()]
+        APx.BenchMode.Generator.Frequency.Value = currentFreq
+
+    def start_measurement(self):
+        # Ustawienie początkowego napięcia
+        user_input_dB = simpledialog.askfloat("Wprowadź wartość dB", "Podaj wartość dB z miernika:")
+        
+        if user_input_dB is not None:
+            # Obliczanie zmiany dB względem 70 dB
+            dB_diff = 70 - user_input_dB
+
+            # Przeliczanie napięcia, aby uzyskać 70 dB
+            self.level_V = self.initial_voltage * 10 ** (dB_diff / 20)
+
+            # Weryfikacja wprowadzonego napięcia
+            messagebox.showinfo("Nowe napięcie", f"Nowe napięcie ustawione na {self.level_V:.6f} V (dla 70 dB)")
+
+            # Ustawienie generatora z nowym napięciem
+            self.setGeneratorParams(self.level_V)
+
+        # Zmiana częstotliwości na 500 Hz i zwiększenie napięcia o 3.2 dB
+        self.set_frequency(500)
+        self.change_voltage_dB(3.2)
+
+        # Po 500 Hz przejdź na 250 Hz i zwiększ napięcie o 8.6 dB
+        self.set_frequency(250)
+        self.change_voltage_dB(8.6)
+
+        # Pytanie o wartość dB i zapisanie jej do pliku Excel
+        user_input_dB = simpledialog.askfloat("Wprowadź wartość", "Podaj wartość dB z miernika:")
+        if user_input_dB is not None:
+            self.values_list.append(user_input_dB)
+            print(self.values_list)
+
+            # Zapisz dane do pliku Excel
+            try:
+                wb = load_workbook('C:/Users/akust/Desktop/Automatyzacja_Jędrzej/automatyzacja_test.xlsx')
+                ws = wb.active
+                for i, value in enumerate(self.values_list, start=1):
+                    ws[f'P{i}'] = value
+                wb.save('C:/Users/akust/Desktop/Automatyzacja_Jędrzej/automatyzacja_test.xlsx')
+                print("Dane zapisane do pliku Excel.")
+            except FileNotFoundError:
+                print("Nie znaleziono pliku Excel. Upewnij się, że ścieżka jest poprawna.")
+
+    def change_voltage_dB(self, dB_increase):
+        # Przeliczanie napięcia na podstawie zmiany dB
+        # Przeliczanie napięcia w zależności od zmiany dB (używając wzoru: V2 = V1 * 10^(dB/20))
+        self.level_V *= 10 ** (dB_increase / 20)
+        self.setGeneratorParams(self.level_V)
 
 # Uruchomienie głównej aplikacji
 if __name__ == "__main__":
-    try:
-        root = tk.Tk()
-        app = AudioInterfaceApp(root)
-        root.mainloop()
-    except Exception as e:
-        messagebox.showerror("Błąd aplikacji", f"Nie udało się uruchomić aplikacji: {str(e)}")
-    finally:
-        if APx.BenchMode.Generator.On:
-            APx.BenchMode.Generator.On = False  # Wyłączenie generatora po zakończeniu pracy
+    root = tk.Tk()
+    app = Audio
